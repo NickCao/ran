@@ -109,12 +109,3 @@ fn regular(i: &[u8]) -> IResult<&[u8], Entry> {
 pub fn nar(i: &[u8]) -> IResult<&[u8], Entry> {
     all_consuming(preceded(padded_tag("nix-archive-1"), entry))(i)
 }
-
-#[cfg(test)]
-mod test {
-    use crate::*;
-    #[test]
-    fn demo() {
-        println!("{}", nar(include_bytes!("../hello.nar")).unwrap().1);
-    }
-}
