@@ -45,7 +45,6 @@ pub fn padded_bytes(i: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 pub fn padded_tag(t: &str) -> impl Fn(&[u8]) -> IResult<&[u8], &[u8]> + '_ {
-    let t = t.clone();
     move |i: &[u8]| {
         delimited(
             tag((t.len() as u64).to_le_bytes()),
