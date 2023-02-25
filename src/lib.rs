@@ -96,12 +96,14 @@ fn symlink(i: &[u8]) -> IResult<&[u8], Entry> {
 fn regular(i: &[u8]) -> IResult<&[u8], Entry> {
     preceded(
         pair(padded_tag("type"), padded_tag("regular")),
-        pair(
-            opt(terminated(padded_tag("executable"), padded_tag(""))),
-            preceded(padded_tag("contents"), padded_bytes),
+        map(
+            pair(
+                opt(terminated(padded_tag("executable"), padded_tag(""))),
+                preceded(padded_tag("contents"), padded_bytes),
+            ),
+            |(executable, content)| Entry::Regular(executable.is_some(), content),
         ),
     )(i)
-    .map(|(i, (executable, content))| (i, Entry::Regular(executable.is_some(), content)))
 }
 
 pub fn nar(i: &[u8]) -> IResult<&[u8], Entry> {
