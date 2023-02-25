@@ -1,6 +1,5 @@
 use nom::branch::alt;
-use nom::combinator::map;
-use nom::combinator::opt;
+use nom::combinator::{all_consuming, map, opt};
 use nom::multi::many0;
 use nom::number::streaming::le_u64;
 use nom::sequence::{delimited, pair, preceded, terminated};
@@ -20,8 +19,8 @@ pub enum Entry<'a> {
 impl Display for Entry<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Regular(executable, _) => write!(f, "regular (executable {})", executable),
-            Self::Symlink(target) => write!(f, "symlink (target {:?})", target),
+            Self::Regular(executable, _) => write!(f, "regular (executable {executable})"),
+            Self::Symlink(target) => write!(f, "symlink (target {target:?})"),
             Self::Directory(entries) => {
                 write!(f, "(directory (")?;
                 for entry in entries {
@@ -89,7 +88,7 @@ fn symlink(i: &[u8]) -> IResult<&[u8], Entry> {
         preceded(
             padded_tag("target"),
             map(padded_bytes, |target| {
-                Entry::Symlink(&Path::new(OsStr::from_bytes(target)))
+                Entry::Symlink(Path::new(OsStr::from_bytes(target)))
             }),
         ),
     )(i)
@@ -107,7 +106,7 @@ fn regular(i: &[u8]) -> IResult<&[u8], Entry> {
 }
 
 pub fn nar(i: &[u8]) -> IResult<&[u8], Entry> {
-    preceded(padded_tag("nix-archive-1"), entry)(i)
+    all_consuming(preceded(padded_tag("nix-archive-1"), entry))(i)
 }
 
 #[cfg(test)]
