@@ -1,15 +1,36 @@
 use nom::branch::alt;
+use nom::combinator::map;
 use nom::combinator::opt;
 use nom::multi::many0;
 use nom::number::streaming::le_u64;
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{bytes::streaming::*, IResult};
+use std::ffi::OsStr;
+use std::fmt::Display;
+use std::os::unix::prelude::OsStrExt;
+use std::path::Path;
 
 #[derive(Debug)]
 pub enum Entry<'a> {
     Regular(bool, &'a [u8]),
-    Symlink(&'a [u8]),
-    Directory(Vec<(&'a [u8], Entry<'a>)>),
+    Symlink(&'a Path),
+    Directory(Vec<(&'a Path, Entry<'a>)>),
+}
+
+impl Display for Entry<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Regular(executable, _) => write!(f, "regular (executable {})", executable),
+            Self::Symlink(target) => write!(f, "symlink (target {:?})", target),
+            Self::Directory(entries) => {
+                write!(f, "(directory (")?;
+                for entry in entries {
+                    write!(f, "((name {:?}) ({}))", entry.0, entry.1)?;
+                }
+                write!(f, "))")
+            }
+        }
+    }
 }
 
 pub fn padding(n: usize) -> impl Fn(&[u8]) -> IResult<&[u8], &[u8]> {
@@ -38,16 +59,20 @@ pub fn padded_tag(t: &str) -> impl Fn(&[u8]) -> IResult<&[u8], &[u8]> + '_ {
 fn directory(i: &[u8]) -> IResult<&[u8], Entry> {
     preceded(
         pair(padded_tag("type"), padded_tag("directory")),
-        many0(delimited(
-            pair(padded_tag("entry"), padded_tag("(")),
-            pair(
-                preceded(padded_tag("name"), padded_bytes),
-                preceded(padded_tag("node"), entry),
-            ),
-            padded_tag(")"),
-        )),
+        map(
+            many0(delimited(
+                pair(padded_tag("entry"), padded_tag("(")),
+                pair(
+                    map(preceded(padded_tag("name"), padded_bytes), |x| {
+                        Path::new(OsStr::from_bytes(x))
+                    }),
+                    preceded(padded_tag("node"), entry),
+                ),
+                padded_tag(")"),
+            )),
+            Entry::Directory,
+        ),
     )(i)
-    .map(|(i, entries)| (i, Entry::Directory(entries)))
 }
 
 fn entry(i: &[u8]) -> IResult<&[u8], Entry> {
@@ -61,9 +86,13 @@ fn entry(i: &[u8]) -> IResult<&[u8], Entry> {
 fn symlink(i: &[u8]) -> IResult<&[u8], Entry> {
     preceded(
         pair(padded_tag("type"), padded_tag("symlink")),
-        padded_bytes,
+        preceded(
+            padded_tag("target"),
+            map(padded_bytes, |target| {
+                Entry::Symlink(&Path::new(OsStr::from_bytes(target)))
+            }),
+        ),
     )(i)
-    .map(|(i, target)| (i, Entry::Symlink(target)))
 }
 
 fn regular(i: &[u8]) -> IResult<&[u8], Entry> {
@@ -86,6 +115,6 @@ mod test {
     use crate::*;
     #[test]
     fn demo() {
-        dbg!(nar(include_bytes!("../hello.nar")).is_ok());
+        println!("{}", nar(include_bytes!("../hello.nar")).unwrap().1);
     }
 }
